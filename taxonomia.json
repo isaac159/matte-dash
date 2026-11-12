@@ -1,0 +1,132 @@
+{
+  "_status": "v2 - após teste com 50 conversas reais: novos segmentos (a maioria era distribuidora/varejo), origem (lead x prospecção) e motivo da perda.",
+  "_como_editar": "Cada categoria vira um campo de lista suspensa no GHL (campo_ghl) e uma tag espelhada (prefixo_tag:valor). A IA só pode escolher valores de 'opcoes'. A 'descricao' de cada opção é o critério que a IA usa para decidir. Valores 'Não se aplica' ficam fora das contagens do dashboard.",
+  "categorias": [
+    {
+      "chave": "origem",
+      "campo_ghl": "IA - Origem da conversa",
+      "prefixo_tag": "ia-origem",
+      "descricao": "Quem começou o contato. Olhe as primeiras mensagens da conversa.",
+      "opcoes": [
+        { "valor": "Lead pediu contato", "descricao": "O lead chegou por conta própria: preencheu formulário, se cadastrou, veio de anúncio/evento, foi indicado ou mandou a primeira mensagem pedindo informação." },
+        { "valor": "Prospecção da Matte", "descricao": "A Matte abordou primeiro, sem pedido prévio do lead (mensagem fria, oferta de análise, campanha para uma lista de empresas)." },
+        { "valor": "Não identificado", "descricao": "Não dá para saber quem iniciou." }
+      ]
+    },
+    {
+      "chave": "segmento",
+      "campo_ghl": "IA - Segmento",
+      "prefixo_tag": "ia-seg",
+      "descricao": "Ramo de atuação da empresa do lead. É a métrica mais importante. Use também o nome do contato, o nome da empresa e o domínio do e-mail, e o ramo citado pela Matte quando ela se referir ao negócio do lead.",
+      "opcoes": [
+        { "valor": "Imobiliária", "descricao": "Imobiliária, corretor, incorporadora, loteadora ou administradora de imóveis." },
+        { "valor": "Advocacia", "descricao": "Escritório de advocacia ou advogado autônomo." },
+        { "valor": "Clínica", "descricao": "Clínica médica, odontológica, estética, fisioterapia, psicologia ou consultório de saúde." },
+        { "valor": "High-ticket", "descricao": "Vende serviço ou produto de alto valor para pessoa física ou empresa: mentoria, consultoria, infoproduto caro, seguros, consórcio, serviço B2B premium." },
+        { "valor": "Distribuidora/Atacado", "descricao": "Distribuidora, atacadista, representação comercial, importação/exportação: vende para outras empresas ou revendedores em volume." },
+        { "valor": "Varejo/Comércio", "descricao": "Loja física ou online que vende ao consumidor final: materiais de construção, pet shop, alimentos, farmácia, móveis, roupas, e-commerce." },
+        { "valor": "Indústria", "descricao": "Fabricante ou indústria: embalagens, ferramentas, máquinas, produtos próprios." },
+        { "valor": "Serviços", "descricao": "Outros prestadores de serviço: academia, escola/curso, agência, software, automotivo, eventos." },
+        { "valor": "Outro", "descricao": "Segmento identificado, mas que não se encaixa em nenhum acima (o resumo deve dizer qual)." },
+        { "valor": "Não identificado", "descricao": "Nem a conversa nem o nome/e-mail permitem saber o ramo." }
+      ]
+    },
+    {
+      "chave": "porte",
+      "campo_ghl": "IA - Porte",
+      "prefixo_tag": "ia-porte",
+      "descricao": "Tamanho da operação comercial do lead, pelo tamanho da equipe, volume de leads/clientes ou faturamento citado.",
+      "opcoes": [
+        { "valor": "Pequeno", "descricao": "Autônomo ou até 2 pessoas no atendimento/comercial, ou menos de 100 leads por mês." },
+        { "valor": "Médio", "descricao": "3 a 10 pessoas no atendimento/comercial, ou 100 a 500 leads por mês." },
+        { "valor": "Grande", "descricao": "Mais de 10 pessoas no atendimento/comercial, mais de 500 leads por mês, várias unidades ou faturamento milionário." },
+        { "valor": "Não identificado", "descricao": "A conversa não dá pistas do tamanho." }
+      ]
+    },
+    {
+      "chave": "dor_principal",
+      "campo_ghl": "IA - Dor principal",
+      "prefixo_tag": "ia-dor",
+      "descricao": "O principal problema que o LEAD disse ou confirmou ter. Não conte a dor que só a Matte sugeriu na abordagem: se o lead não falou nem confirmou nenhuma dor, use 'Não identificado'.",
+      "opcoes": [
+        { "valor": "Demora no atendimento", "descricao": "Clientes esperam muito por resposta ou ficam sem resposta fora do horário." },
+        { "valor": "Leads sem follow-up", "descricao": "Leads ou clientes esfriam/somem porque ninguém retoma o contato." },
+        { "valor": "Baixa conversão", "descricao": "Recebe leads e responde, mas poucos viram reunião, visita, consulta ou venda." },
+        { "valor": "Equipe sobrecarregada", "descricao": "O time gasta tempo demais com atendimento repetitivo ou qualificação manual." },
+        { "valor": "Desorganização comercial", "descricao": "Sem CRM, sem funil, sem controle de leads ou sem visibilidade do processo." },
+        { "valor": "Poucos leads", "descricao": "O problema é gerar demanda / volume de leads, não atender." },
+        { "valor": "Outro", "descricao": "Dor dita pelo lead, mas diferente das anteriores." },
+        { "valor": "Não identificado", "descricao": "O lead não falou nem confirmou nenhuma dor." }
+      ]
+    },
+    {
+      "chave": "duvida_principal",
+      "campo_ghl": "IA - Dúvida principal",
+      "prefixo_tag": "ia-duvida",
+      "descricao": "O que o lead mais quis saber sobre a solução da Matte (implementação de IA + CRM integrado + suporte).",
+      "opcoes": [
+        { "valor": "Preço", "descricao": "Quanto custa, formas de pagamento, mensalidade." },
+        { "valor": "Como funciona", "descricao": "Como a IA atende, o que ela faz, se parece robô, exemplos de uso." },
+        { "valor": "Implantação", "descricao": "Prazo para colocar no ar, o que precisa fornecer, esforço do time dele." },
+        { "valor": "Integração", "descricao": "Se funciona com o WhatsApp, sistema, CRM ou ferramentas que ele já usa." },
+        { "valor": "Resultados", "descricao": "Cases, provas, quanto aumenta conversão ou economiza tempo." },
+        { "valor": "Suporte", "descricao": "Como funciona o suporte, acompanhamento, ajustes depois de implantado." },
+        { "valor": "Nenhuma", "descricao": "Não fez perguntas sobre a solução." }
+      ]
+    },
+    {
+      "chave": "desfecho",
+      "campo_ghl": "IA - Desfecho",
+      "prefixo_tag": "ia-desfecho",
+      "descricao": "Em que ponto a conversa está (situação na última mensagem). Respostas automáticas de ausência não contam como resposta do lead.",
+      "opcoes": [
+        { "valor": "Reunião agendada", "descricao": "Marcou reunião, diagnóstico, apresentação ou onboarding." },
+        { "valor": "Pediu proposta", "descricao": "Pediu preço ou proposta formal, mas ainda não agendou." },
+        { "valor": "Em conversa", "descricao": "Conversa ativa: o lead respondeu por último ou ainda está tirando dúvidas." },
+        { "valor": "Sem resposta", "descricao": "O lead nunca respondeu ou parou de responder às mensagens da Matte." },
+        { "valor": "Perdido", "descricao": "O lead recusou, pediu para parar, disse que não tem interesse, era contato errado ou está fora do perfil." }
+      ]
+    },
+    {
+      "chave": "motivo_perda",
+      "campo_ghl": "IA - Motivo da perda",
+      "prefixo_tag": "ia-perda",
+      "descricao": "Por que a conversa não avançou. Só preencha quando o desfecho for 'Sem resposta' ou 'Perdido'. Nos outros casos use 'Não se aplica'.",
+      "opcoes": [
+        { "valor": "Não respondeu", "descricao": "O lead não mandou nenhuma resposta real no período (só silêncio ou mensagens automáticas)." },
+        { "valor": "Parou de responder", "descricao": "O lead chegou a conversar, mas sumiu depois." },
+        { "valor": "Pediu para parar", "descricao": "Respondeu 'parar', 'sair', 'remover', 'bloquear' ou pediu para não receber mais mensagens." },
+        { "valor": "Contato errado", "descricao": "Número errado, pessoa errada, número particular ou não é o responsável." },
+        { "valor": "Sem interesse agora", "descricao": "Disse que não precisa, não é o momento ou não tem interesse." },
+        { "valor": "Fora do perfil", "descricao": "Não tem o perfil para a solução: sem volume, sem orçamento, operação parada, só curioso." },
+        { "valor": "Não se aplica", "descricao": "A conversa não foi perdida (reunião, proposta ou em conversa)." }
+      ]
+    },
+    {
+      "chave": "objecao",
+      "campo_ghl": "IA - Objeção principal",
+      "prefixo_tag": "ia-obj",
+      "descricao": "A principal objeção ou trava que o lead declarou sobre a solução.",
+      "opcoes": [
+        { "valor": "Preço", "descricao": "Achou caro ou questionou o investimento." },
+        { "valor": "Momento", "descricao": "Não é prioridade agora, quer deixar para depois." },
+        { "valor": "Já tem solução", "descricao": "Já usa outra ferramenta, agência ou equipe interna." },
+        { "valor": "Decisão compartilhada", "descricao": "Precisa consultar sócio, gestor ou outra pessoa." },
+        { "valor": "Desconfiança com IA", "descricao": "Dúvida se IA funciona no negócio dele ou receio de soar robótico para os clientes." },
+        { "valor": "Nenhuma", "descricao": "Não declarou objeção." }
+      ]
+    }
+  ],
+  "_sem_resposta": "Conversas em que o lead não respondeu no período não passam pela IA (custo zero): recebem estes valores; as categorias que não aparecem aqui ficam 'Não identificado'.",
+  "sem_resposta": {
+    "desfecho": "Sem resposta",
+    "motivo_perda": "Não respondeu",
+    "duvida_principal": "Nenhuma",
+    "objecao": "Nenhuma",
+    "resumo": "Lead não respondeu às mensagens no período (registrado sem IA)."
+  },
+  "resumo": {
+    "campo_ghl": "IA - Resumo da conversa",
+    "descricao": "Resumo em 2 a 4 frases: quem é o lead e o ramo (seja específico quando for 'Outro'), quem iniciou o contato, o que o lead disse querer e em que pé a conversa parou."
+  }
+}

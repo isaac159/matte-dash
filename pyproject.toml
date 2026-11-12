@@ -1,0 +1,15 @@
+[project]
+name = "matte-metricas-conversas"
+version = "1.0.0"
+description = "Classifica as conversas do GHL com IA, salva no Postgres e gera o dashboard"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"

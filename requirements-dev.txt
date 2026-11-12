@@ -1,0 +1,4 @@
+# Ferramentas de desenvolvimento (não precisam rodar no servidor)
+-r requirements.txt
+ruff>=0.8,<1      # formatador e verificador do Python
+pillow>=11,<13    # usado para recortar o logo da pasta marca/

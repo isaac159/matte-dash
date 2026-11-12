@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Matte — Inteligência de Conversas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Squada+One&family=Urbanist:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/fonte.css" />
+    <link rel="stylesheet" href="css/estilo.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside>
+        <div class="logo">
+          <img class="completo" src="img/logo-matte.png" alt="matte" />
+          <img class="simbolo" src="img/seta-matte.png" alt="matte" />
+          <small>Inteligência de conversas</small>
+        </div>
+        <nav class="lateral" aria-label="Seções">
+          <a href="#visao" class="ativo" title="Visão geral">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="9" rx="2" />
+              <rect x="14" y="3" width="7" height="5" rx="2" />
+              <rect x="14" y="12" width="7" height="9" rx="2" />
+              <rect x="3" y="16" width="7" height="5" rx="2" />
+            </svg>
+            <span>Visão geral</span>
+          </a>
+          <a href="#segmentos" title="Segmentos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M3 21h18M6 21V10M11 21V4M16 21v-7M21 21v-3" />
+            </svg>
+            <span>Segmentos</span>
+          </a>
+          <a href="#funil" title="Funil e perdas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 4h18l-7 8v6l-4 2v-8z" />
+            </svg>
+            <span>Funil e perdas</span>
+          </a>
+          <a href="#perfil" title="Perfil dos leads">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+            </svg>
+            <span>Perfil dos leads</span>
+          </a>
+          <a href="#detalhes" title="Detalhes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            <span>Detalhes</span>
+          </a>
+        </nav>
+        <div class="rodape-lateral">
+          <div class="selo-ao-vivo">Atualização diária</div>
+          <div id="atualizado-lateral"></div>
+        </div>
+      </aside>
+
+      <main>
+        <div class="topo" id="visao">
+          <p id="atualizado"></p>
+          <div class="filtros" role="group" aria-label="Filtros">
+            <div class="seg-ctl" id="atalhos-periodo" aria-label="Período">
+              <button type="button" data-periodo="hoje">Hoje</button>
+              <button type="button" data-periodo="ontem">Ontem</button>
+              <button type="button" data-periodo="7d">7 dias</button>
+              <button type="button" data-periodo="30d">30 dias</button>
+            </div>
+            <div class="periodos">
+              <button type="button" id="abrir-periodos" aria-haspopup="true" aria-expanded="false">
+                Mais períodos
+              </button>
+              <div class="painel-periodos" id="painel-periodos" role="menu" hidden>
+                <div id="lista-periodos"></div>
+                <form class="personalizado" id="form-personalizado">
+                  <span>Personalizado</span>
+                  <div class="datas">
+                    <input type="date" id="data-de" aria-label="Data inicial" required />
+                    <input type="date" id="data-ate" aria-label="Data final" required />
+                  </div>
+                  <button type="submit" class="btn">Aplicar</button>
+                </form>
+              </div>
+            </div>
+            <label class="sel">
+              <select id="f-segmento" aria-label="Filtrar por segmento"></select>
+            </label>
+            <label class="sel">
+              <select id="f-origem" aria-label="Filtrar por origem"></select>
+            </label>
+          </div>
+        </div>
+        <p class="periodo-desc" id="periodo-desc"></p>
+        <div class="chips" id="chips"></div>
+
+        <section class="grade g4" id="kpis" aria-label="Indicadores"></section>
+
+        <div class="grade g-2-1">
+          <figure class="cartao" id="c-dias">
+            <div class="cab">
+              <div>
+                <h2>Conversas por dia</h2>
+                <p id="sub-dias">Contatados × leads que responderam</p>
+              </div>
+              <button type="button" class="btn" data-tabela="dias">Tabela</button>
+            </div>
+            <div class="legenda" id="legenda-dias">
+              <span><i style="background: var(--white-series)"></i>Conversas</span>
+              <span><i style="background: var(--pink)"></i>Responderam</span>
+            </div>
+            <div class="corpo"></div>
+          </figure>
+          <figure class="cartao" id="c-origem">
+            <div class="cab">
+              <div>
+                <h2>Origem</h2>
+                <p>Quem iniciou o contato</p>
+              </div>
+              <button type="button" class="btn" data-tabela="origem">Tabela</button>
+            </div>
+            <div class="corpo"></div>
+            <p class="dica-clique">Clique numa fatia para filtrar o dashboard.</p>
+          </figure>
+        </div>
+
+        <h2 class="secao-titulo" id="segmentos"><i>◆</i>Segmentos</h2>
+        <div class="grade g2">
+          <figure class="cartao" id="c-segmento">
+            <div class="cab">
+              <div>
+                <h2>Conversas por segmento</h2>
+                <p id="sub-segmento"></p>
+              </div>
+              <button type="button" class="btn" data-tabela="segmento">Tabela</button>
+            </div>
+            <div class="corpo"></div>
+            <p class="dica-clique">Clique num segmento para filtrar o dashboard.</p>
+          </figure>
+          <figure class="cartao" id="c-conversao">
+            <div class="cab">
+              <div>
+                <h2>Quanto vira reunião</h2>
+                <p>% de reuniões agendadas entre os leads que responderam</p>
+              </div>
+              <button type="button" class="btn" data-tabela="conversao">Tabela</button>
+            </div>
+            <div class="corpo"></div>
+          </figure>
+        </div>
+
+        <h2 class="secao-titulo" id="funil"><i>▼</i>Funil e perdas</h2>
+        <div class="grade g2">
+          <figure class="cartao" id="c-funil">
+            <div class="cab">
+              <div>
+                <h2>Funil da conversa</h2>
+                <p>Do contato até a reunião</p>
+              </div>
+              <button type="button" class="btn" data-tabela="funil">Tabela</button>
+            </div>
+            <div class="corpo"></div>
+          </figure>
+          <figure class="cartao" id="c-motivo_perda">
+            <div class="cab">
+              <div>
+                <h2>Por que não avançou</h2>
+                <p id="sub-motivo"></p>
+              </div>
+              <button type="button" class="btn" data-tabela="motivo_perda">Tabela</button>
+            </div>
+            <div class="corpo"></div>
+          </figure>
+        </div>
+
+        <h2 class="secao-titulo" id="perfil"><i>●</i>Perfil de quem respondeu</h2>
+        <div class="grade g-auto" id="grade-perfil"></div>
+
+        <h2 class="secao-titulo" id="detalhes"><i>≡</i>Segmentos em detalhe</h2>
+        <div class="cartao">
+          <div class="cab">
+            <div>
+              <h2>Comparativo por segmento</h2>
+              <p>Clique numa linha para abrir os detalhes · clique no título da coluna para ordenar</p>
+            </div>
+          </div>
+          <div class="tabela-wrap" id="tabela-segmentos"></div>
+        </div>
+
+        <footer>
+          Inteligência de conversas · <b>Matte</b> · gerado automaticamente a partir das conversas do GHL
+        </footer>
+      </main>
+    </div>
+    <div id="dica" role="tooltip"></div>
+
+    <!-- dados.js é gerado pelo coletor (python -m coletor.dashboard) e define window.DADOS -->
+    <script src="dados.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

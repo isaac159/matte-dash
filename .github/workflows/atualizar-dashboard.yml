@@ -1,0 +1,62 @@
+# Atualiza o dashboard sozinho: busca conversas novas no GHL, classifica com IA,
+# salva no Supabase, monta o site e publica (a Vercel publica a cada novo commit em publicar/).
+
+name: Atualizar dashboard
+
+on:
+  schedule:
+    # horários em UTC: 10h, 13h, 16h, 19h, 22h e 01h UTC = 7h, 10h, 13h, 16h, 19h e 22h em Brasília
+    - cron: "0 10,13,16,19,22 * * *"
+    - cron: "0 1 * * *"
+  workflow_dispatch: # botão "Run workflow" para rodar na hora
+
+concurrency:
+  group: atualizar-dashboard
+  cancel-in-progress: false
+
+permissions:
+  contents: write # para salvar a pasta publicar/ atualizada no repositório
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Coletar e classificar conversas novas
+        env:
+          GHL_TOKEN: ${{ secrets.GHL_TOKEN }}
+          GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          IGNORAR_CONTATOS: ${{ secrets.IGNORAR_CONTATOS }}
+          PARALELO: "8"
+        run: python -u -m coletor.main
+
+      - name: Montar o dashboard
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m coletor.dashboard
+
+      - name: Publicar (commit em publicar/)
+        run: |
+          git config user.name "matte-dashboard-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add publicar
+          if git diff --cached --quiet; then
+            echo "Nada mudou no dashboard."
+          else
+            git commit -m "Atualiza dashboard ($(TZ=America/Sao_Paulo date +'%d/%m %H:%M'))"
+            git push
+          fi

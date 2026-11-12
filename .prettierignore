@@ -1,0 +1,4 @@
+# gerados automaticamente (python -m coletor.dashboard): edite em dashboard/
+publicar/
+relatorios/
+.venv/
