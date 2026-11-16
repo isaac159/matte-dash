@@ -44,6 +44,13 @@ jobs:
           PARALELO: "8"
         run: python -u -m coletor.main
 
+      - name: Ler a planilha de reuniões dos closers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PLANILHA_ID: ${{ secrets.PLANILHA_ID }}
+          GOOGLE_CREDENCIAIS_JSON: ${{ secrets.GOOGLE_CREDENCIAIS_JSON }}
+        run: python -u -m coletor.reunioes
+
       - name: Montar o dashboard
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

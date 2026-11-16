@@ -17,6 +17,7 @@ from datetime import datetime
 
 from coletor import banco, config
 from coletor.classificar import Classificador, montar_contexto, montar_transcricao
+from coletor.contatos import completar_contatos, dados_do_contato, mapa_campos_utm
 from coletor.ghl import GHL
 
 UM_DIA_MS = 24 * 60 * 60 * 1000
@@ -136,6 +137,8 @@ def main() -> None:
     gravar_ghl = config.GRAVAR_NO_GHL and not args.seco
     ids_campos = mapear_campos(ghl, taxonomia) if gravar_ghl else None
     print("GHL: " + ("grava campos e tags nos contatos" if gravar_ghl else "somente leitura"))
+    campos_utm = mapa_campos_utm(ghl)
+    contatos_lidos: list[dict] = []
 
     print(
         f"Modo {modo} | conversas desde {datetime.fromtimestamp(desde_ms / 1000):%d/%m/%Y %H:%M}", flush=True
@@ -174,6 +177,7 @@ def main() -> None:
         if not transcricao or do_lead < config.MIN_MENSAGENS_LEAD:
             return None
         contato = ghl.contato(conversa["contactId"])
+        contatos_lidos.append(dados_do_contato({**contato, "id": conversa["contactId"]}, campos_utm))
         contexto = montar_contexto(contato, truncada, config.MAX_MENSAGENS)
         resultado, t_in, t_out = classificador.classificar(transcricao, contexto)
         if gravar_ghl:
@@ -210,6 +214,10 @@ def main() -> None:
     if args.seco:
         exportar_csv(taxonomia, analisadas)
     else:
+        # UTMs e origem: salva os contatos já lidos e completa os que faltam (sem IA, só leitura do GHL)
+        db.salvar_contatos(contatos_lidos)
+        completados = completar_contatos(ghl, db, limite=config.CONTATOS_POR_RODADA, paralelo=config.PARALELO)
+        print(f"Contatos com UTMs/origem atualizados: {len(contatos_lidos) + completados}", flush=True)
         db.registrar_execucao(inicio_ms, modo, len(analisadas) + len(sem_resposta), erros)
 
     custo = tokens_in / 1e6 * config.PRECO_ENTRADA_1M + tokens_out / 1e6 * config.PRECO_SAIDA_1M

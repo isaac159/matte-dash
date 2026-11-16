@@ -7,3 +7,5 @@ relatorios/
 .ruff_cache/
 .claude/
 fontes/
+# credencial da conta de serviço do Google (nunca vai para o git)
+google-*.json

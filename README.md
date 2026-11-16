@@ -7,9 +7,11 @@ dashboard que pode ser aberto dentro do GHL pelo menu lateral.
 **Modo padrão: o GHL só é lido.** Gravar campos e tags nos contatos é opcional (`GRAVAR_NO_GHL=sim`).
 
 ```
-GHL (conversas) ──► coletor.main ──► OpenAI (classificação presa à taxonomia)
-                         │
-                         └─► Postgres (Supabase) ──► coletor.dashboard ──► publicar/ (site)
+GHL (conversas + UTMs) ──► coletor.main ──► OpenAI (classificação presa à taxonomia)
+                               │
+Google Sheets (closers) ──► coletor.reunioes
+                               │
+                               └─► Postgres (Supabase) ──► coletor.dashboard ──► publicar/ (site)
 ```
 
 ## Organização
@@ -17,7 +19,9 @@ GHL (conversas) ──► coletor.main ──► OpenAI (classificação presa �
 ```
 Matte/
 ├── coletor/                 código Python (rode sempre da pasta do projeto: python -m coletor.<script>)
-│   ├── main.py              busca conversas, classifica e salva
+│   ├── main.py              busca conversas, classifica e salva (e lê UTMs dos contatos)
+│   ├── contatos.py          UTMs e origem de cada contato no GHL (sem IA)
+│   ├── reunioes.py          lê a planilha dos closers e liga cada reunião ao lead
 │   ├── dashboard.py         monta o site em publicar/ com os dados do banco
 │   ├── classificar.py       chamada à OpenAI (instruções + formato da resposta)
 │   ├── ghl.py               cliente da API do GHL
@@ -63,6 +67,10 @@ python -m coletor.main
 python -m coletor.dashboard
 python -m coletor.dashboard --demo   # dados de exemplo
 
+# Reuniões da planilha dos closers (Google Sheets) -> banco
+python -m coletor.reunioes --seco    # só mostra o resumo
+python -m coletor.reunioes
+
 # Métricas em texto + CSV
 python -m coletor.relatorio --dias 30
 ```
@@ -85,6 +93,19 @@ O mês de 12/10 a 12/11/2026 (12.267 conversas, 2.861 pela IA) custou US$ 5,28.
 - Filtros de segmento e origem; clicar numa barra ou fatia filtra tudo; cada gráfico tem botão **Tabela**.
 - `publicar/dados.js` leva só as classificações e o dia de cada conversa: **nada de nome, telefone ou
   resumo**. Por isso pode ser hospedado.
+
+### Reuniões (planilha dos closers) e campanhas (UTMs)
+
+- **Reuniões vêm da planilha**, não da IA: agendadas (pela data do agendamento), comparecimento,
+  no-show e vendas (pela data da reunião), por closer e por SDR. Entram só reuniões agendadas a partir do
+  primeiro dia de conversas analisadas, para os números baterem com o resto do dashboard.
+- Cada reunião é ligada ao lead do GHL pelo **telefone (DDD + 8 últimos dígitos) ou e-mail**; assim
+  aparecem reuniões por segmento e por campanha. No banco ficam só hashes, nunca o telefone ou e-mail.
+- **Campanhas:** `utm_campaign`, `utm_medium` (público), `utm_content` (criativo) e `utm_source`, lidos
+  dos campos personalizados do contato. Tabela "do anúncio à reunião" e filtro por campanha.
+- Acesso à planilha: conta de serviço do Google com permissão de **Leitor** na planilha. Local:
+  `google-leitor.json` + `PLANILHA_ID` no `.env`. GitHub: segredos `PLANILHA_ID` e
+  `GOOGLE_CREDENCIAIS_JSON` (conteúdo do arquivo .json).
 
 ### Editar o visual
 

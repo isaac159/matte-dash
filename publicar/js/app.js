@@ -29,11 +29,37 @@
     return o;
   });
 
+  // reuniões da planilha dos closers: [dia agendado, dia da reunião, status, closer, sdr, qualificação,
+  // vendido, valor, ligada a um lead do GHL, categorias do lead (segmento, origem, UTMs...)]
+  const RC = DADOS.reunioes || { categorias: [], r: [] };
+  const opcoesReuniao = (chave) => (RC.categorias.find((c) => c.chave === chave) || { opcoes: [] }).opcoes;
+  const REU = RC.r.map((l) => {
+    const o = {
+      ag: l[0],
+      dia: l[1],
+      status: opcoesReuniao("status")[l[2]],
+      closer: opcoesReuniao("closer")[l[3]],
+      sdr: opcoesReuniao("sdr")[l[4]],
+      qualificacao: opcoesReuniao("qualificacao_closer")[l[5]],
+      vendido: !!l[6],
+      valor: l[7],
+      ligada: !!l[8],
+    };
+    CATS.forEach((c, i) => {
+      o[c.chave] = c.opcoes[l[9 + i]];
+    });
+    return o;
+  });
+  const COMPARECEU = "Comparecido";
+  const NO_SHOW = "No show";
+  // reuniões do período atual (preenchido em render): agendadas no período e com data de reunião no período
+  const ctx = { reuAg: [], reuAgAnt: null, reuDia: [] };
+
   // dias contados no horário de Brasília, igual ao coletor
   const hoje = Math.floor((Date.now() + DADOS.fuso_ms) / DIA);
   const primeiroDia = REG.reduce((min, r) => Math.min(min, r.d), hoje);
 
-  const estado = { periodo: { id: "30d" }, segmento: "", origem: "" };
+  const estado = { periodo: { id: "30d" }, segmento: "", origem: "", utm_campaign: "", dimUtm: "utm_campaign" };
   const modoTabela = {};
 
   // =========================================================
@@ -283,7 +309,7 @@
     const itens = c.opcoes
       .filter((v) => v !== NAO_SE_APLICA)
       .map((v) => ({ v, n: cont[v] || 0, neutra: NEUTRAS.includes(v) }))
-      .filter((i) => i.n > 0 || !i.neutra);
+      .filter((i) => i.n > 0 || (!i.neutra && !opcoes.ocultarZeros));
     if (!opcoes.ordemFixa) itens.sort((a, b) => a.neutra - b.neutra || b.n - a.n);
     const max = Math.max(...itens.map((i) => i.n), 1);
     return {
@@ -338,6 +364,9 @@
     // calendário de mesa com espiral
     reuniao:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6.5h15v14H5z"/><path d="M5 20.5l-2 1.6V8.2L5 6.5"/><path d="M7 9.2h11"/><path d="M7 12.4h11M7 15.4h11M7 18.2h11M10.6 12.4v5.8M14.3 12.4v5.8"/><path d="M7.6 4.6v3M10.3 4.6v3M13 4.6v3M15.7 4.6v3M18.4 4.6v3" stroke-width="1.8"/></svg>',
+    // pessoa com check (compareceu)
+    comparecimento:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7 1.6 0 3 .5 4.2 1.4"/><path d="M15 18l2.5 2.5L22 16"/></svg>',
     // proibido
     parar:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M4.9 4.9l14.2 14.2"/></svg>',
@@ -422,12 +451,10 @@
   function renderKpis(regs, ant, intervalo, serieDiaria) {
     const total = regs.length;
     const resp = regs.filter(respondeu).length;
-    const reun = regs.filter(reuniao).length;
     const parar = regs.filter(pediuParar).length;
     const cmp = intervalo.comparar;
     const aTot = ant ? ant.length : null;
     const aResp = ant ? ant.filter(respondeu).length : null;
-    const aReun = ant ? ant.filter(reuniao).length : null;
     const aParar = ant ? ant.filter(pediuParar).length : null;
     const quando = `${intervalo.rotulo.toLowerCase()} · ${faixaTexto(intervalo.de, intervalo.ate)}`;
 
@@ -445,19 +472,33 @@
     definirDelta(k2, aTot ? textoDelta(taxaResp, (aResp / aTot) * 100, cmp, true) : "");
     animarLargura(k2.barra, `${taxaResp}%`);
 
+    // reuniões: a fonte oficial é a planilha dos closers
+    const reun = ctx.reuAg.length;
+    const aReun = ctx.reuAgAnt ? ctx.reuAgAnt.length : null;
     const taxaReun = resp ? (reun / resp) * 100 : 0;
     const k3 = kpi("reuniao", "Reuniões agendadas", true);
     contarAte(k3.valor, reun);
-    k3.det.textContent = `${Math.round(taxaReun)}% de quem respondeu`;
+    k3.det.textContent = REU.length
+      ? `planilha dos closers · ${Math.round(taxaReun)}% de quem respondeu`
+      : "planilha ainda não conectada";
     definirDelta(k3, textoDelta(reun, aReun, cmp));
-    animarLargura(k3.barra, `${taxaReun}%`);
+    animarLargura(k3.barra, `${Math.min(100, taxaReun)}%`);
+
+    const comp = ctx.reuDia.filter((m) => m.status === COMPARECEU).length;
+    const noShow = ctx.reuDia.filter((m) => m.status === NO_SHOW).length;
+    const taxaComp = comp + noShow ? (comp / (comp + noShow)) * 100 : 0;
+    const k4 = kpi("comparecimento", "Comparecimento", true);
+    contarAte(k4.valor, Math.round(taxaComp), "%");
+    k4.det.textContent = `${fmt(comp)} compareceram · ${fmt(noShow)} no-show`;
+    definirDelta(k4, "");
+    animarLargura(k4.barra, `${taxaComp}%`);
 
     const taxaParar = total ? (parar / total) * 100 : 0;
-    const k4 = kpi("parar", "Pediram para parar", true);
-    contarAte(k4.valor, Math.round(taxaParar), "%");
-    k4.det.textContent = `${fmt(parar)} pedidos de remoção`;
-    definirDelta(k4, aTot ? textoDelta(taxaParar, (aParar / aTot) * 100, cmp, true) : "");
-    animarLargura(k4.barra, `${taxaParar}%`);
+    const k5 = kpi("parar", "Pediram para parar", true);
+    contarAte(k5.valor, Math.round(taxaParar), "%");
+    k5.det.textContent = `${fmt(parar)} pedidos de remoção`;
+    definirDelta(k5, aTot ? textoDelta(taxaParar, (aParar / aTot) * 100, cmp, true) : "");
+    animarLargura(k5.barra, `${taxaParar}%`);
   }
 
   // =========================================================
@@ -738,8 +779,9 @@
     const linhas = seg.opcoes
       .map((v) => {
         const resp = regs.filter((r) => r.segmento === v && respondeu(r));
-        const ok = resp.filter(reuniao).length;
-        return { v, total: resp.length, ok, taxa: resp.length ? ok / resp.length : 0, neutra: NEUTRAS.includes(v) };
+        const ok = ctx.reuAg.filter((m) => m.segmento === v).length;
+        const taxa = resp.length ? Math.min(1, ok / resp.length) : 0;
+        return { v, total: resp.length, ok, taxa, neutra: NEUTRAS.includes(v) };
       })
       .filter((l) => l.total > 0);
     if (!linhas.length) return null;
@@ -798,7 +840,9 @@
         sub: "em conversa, proposta ou reunião",
         n: resp.filter((r) => engajadosValores.includes(r.desfecho)).length,
       },
-      { nome: "Reunião agendada", sub: "diagnóstico ou apresentação", n: regs.filter(reuniao).length },
+      { nome: "Reunião agendada", sub: "planilha dos closers", n: ctx.reuAg.length },
+      { nome: "Compareceu", sub: "reuniões realizadas", n: ctx.reuDia.filter((m) => m.status === COMPARECEU).length },
+      { nome: "Venda", sub: "produto vendido", n: ctx.reuDia.filter((m) => m.vendido).length },
     ];
     return {
       grafico() {
@@ -851,7 +895,7 @@
       .map((v) => {
         const rs = regs.filter((r) => r.segmento === v);
         const resp = rs.filter(respondeu);
-        const reun = rs.filter(reuniao).length;
+        const reun = ctx.reuAg.filter((m) => m.segmento === v).length;
         const dores = contar(
           resp.filter((r) => !NEUTRAS.includes(r.dor_principal)),
           "dor_principal",
@@ -972,7 +1016,166 @@
   }
 
   // =========================================================
-  // Filtros (segmento, origem) e etiquetas
+  // Tabela agrupada genérica (closers, SDRs, campanhas)
+  // =========================================================
+
+  /**
+   * colunas: [{ titulo, valor(grupo) -> texto/elemento, n?: true (alinha à direita) }]
+   * opcoes: { aoClicar(chave), selecionado, vazio }
+   */
+  function tabelaAgrupada(boxId, grupos, colunas, opcoes = {}) {
+    const box = document.getElementById(boxId);
+    box.textContent = "";
+    if (!grupos.length) {
+      box.appendChild(el("p", "vazio", opcoes.vazio || "Sem reuniões neste filtro."));
+      return;
+    }
+    const t = el("table");
+    const thead = el("thead");
+    const tr = el("tr");
+    colunas.forEach((c) => tr.appendChild(el("th", c.n ? "n" : null, c.titulo)));
+    thead.appendChild(tr);
+    t.appendChild(thead);
+    const tbody = el("tbody");
+    grupos.forEach((g) => {
+      const row = el("tr");
+      if (opcoes.aoClicar) {
+        row.className = `clicavel${opcoes.selecionado === g.chave ? " selecionada" : ""}`;
+        row.tabIndex = 0;
+        aoAtivar(row, () => opcoes.aoClicar(g.chave));
+      }
+      colunas.forEach((c, i) => {
+        const td = el("td", [c.n ? "n num" : null, i === 0 && opcoes.textoLongo ? "texto-longo" : null].filter(Boolean).join(" ") || null);
+        const v = c.valor(g);
+        if (v instanceof Node) td.appendChild(v);
+        else td.textContent = v;
+        row.appendChild(td);
+      });
+      tbody.appendChild(row);
+    });
+    t.appendChild(tbody);
+    box.appendChild(t);
+  }
+
+  function pilulaTaxa(v) {
+    const s = el("span", "pill-taxa");
+    const i = el("i");
+    const b = el("b");
+    b.style.width = `${Math.round(Math.min(1, v) * 100)}%`;
+    i.appendChild(b);
+    s.appendChild(document.createTextNode(`${Math.round(v * 100)}%`));
+    s.appendChild(i);
+    return s;
+  }
+
+  // =========================================================
+  // Reuniões (planilha dos closers)
+  // =========================================================
+
+  function renderReunioes() {
+    const aviso = document.getElementById("aviso-reunioes");
+    aviso.textContent = REU.length
+      ? "Reuniões agendadas desde o início da análise das conversas. Cada reunião é ligada ao lead do GHL pelo telefone ou e-mail."
+      : "A planilha de reuniões ainda não foi conectada.";
+
+    // status: reuniões com data no período (o que já aconteceu ou está marcado)
+    const status = { chave: "status", titulo: "Status", opcoes: opcoesReuniao("status") };
+    document.getElementById("sub-status-reuniao").textContent =
+      `${fmt(ctx.reuDia.length)} reuniões com data no período (até hoje)`;
+    preencher("status-reuniao", ctx.reuDia.length ? barras(ctx.reuDia, status, { ordemFixa: true, ocultarZeros: true }) : null);
+
+    // segmento dos leads que agendaram (só reuniões ligadas a um lead analisado)
+    const ligadas = ctx.reuAg.filter((m) => m.ligada);
+    const seg = cat("segmento");
+    document.getElementById("sub-reuniao-segmento").textContent =
+      `${fmt(ligadas.length)} de ${fmt(ctx.reuAg.length)} reuniões agendadas ligadas a um lead analisado`;
+    preencher("reuniao-segmento", seg && ligadas.length ? barras(ligadas, seg, { ocultarZeros: true }) : null);
+
+    // closers: pela data da reunião
+    const porGrupo = (lista, chave) => {
+      const mapa = {};
+      lista.forEach((m) => {
+        (mapa[m[chave]] = mapa[m[chave]] || []).push(m);
+      });
+      return Object.entries(mapa).map(([k, ms]) => ({ chave: k, ms }));
+    };
+    const resumo = (g) => {
+      const comp = g.ms.filter((m) => m.status === COMPARECEU).length;
+      const ns = g.ms.filter((m) => m.status === NO_SHOW).length;
+      const vendas = g.ms.filter((m) => m.vendido);
+      return {
+        ...g,
+        total: g.ms.length,
+        comp,
+        taxaComp: comp + ns ? comp / (comp + ns) : 0,
+        vendas: vendas.length,
+        valor: vendas.reduce((s, m) => s + (m.valor || 0), 0),
+        mql: g.ms.filter((m) => m.qualificacao === "MQL").length,
+      };
+    };
+    const closers = porGrupo(ctx.reuDia, "closer").map(resumo).sort((a, b) => b.total - a.total);
+    tabelaAgrupada("tabela-closers", closers, [
+      { titulo: "Closer", valor: (g) => g.chave },
+      { titulo: "Reuniões", n: true, valor: (g) => fmt(g.total) },
+      { titulo: "Compareceram", n: true, valor: (g) => fmt(g.comp) },
+      { titulo: "Comparecimento", n: true, valor: (g) => pilulaTaxa(g.taxaComp) },
+      { titulo: "Vendas", n: true, valor: (g) => fmt(g.vendas) },
+      { titulo: "Valor vendido", n: true, valor: (g) => (g.valor ? fmtReais(g.valor) : "—") },
+    ]);
+
+    // SDRs: pelas reuniões agendadas no período
+    const sdrs = porGrupo(ctx.reuAg, "sdr").map(resumo).sort((a, b) => b.total - a.total);
+    tabelaAgrupada("tabela-sdrs", sdrs, [
+      { titulo: "SDR", valor: (g) => g.chave },
+      { titulo: "Agendadas", n: true, valor: (g) => fmt(g.total) },
+      { titulo: "Comparecimento", n: true, valor: (g) => pilulaTaxa(g.taxaComp) },
+      { titulo: "MQL (closer)", n: true, valor: (g) => pilulaTaxa(g.total ? g.mql / g.total : 0) },
+      { titulo: "Vendas", n: true, valor: (g) => fmt(g.vendas) },
+    ]);
+  }
+
+  // =========================================================
+  // Campanhas (UTMs): do anúncio à reunião
+  // =========================================================
+
+  function renderCampanhas(regs) {
+    const dim = estado.dimUtm;
+    const c = cat(dim);
+    if (!c) return;
+    const grupos = c.opcoes
+      .map((v) => {
+        const leads = regs.filter((r) => r[dim] === v);
+        const resp = leads.filter(respondeu).length;
+        const reus = ctx.reuAg.filter((m) => m[dim] === v);
+        const comp = ctx.reuDia.filter((m) => m[dim] === v && m.status === COMPARECEU).length;
+        const vendas = ctx.reuDia.filter((m) => m[dim] === v && m.vendido).length;
+        return { chave: v, leads: leads.length, resp, reus: reus.length, comp, vendas, sem: v === "Sem UTM" || v === "Outras" };
+      })
+      .filter((g) => g.leads || g.reus)
+      .sort((a, b) => a.sem - b.sem || b.reus - a.reus || b.leads - a.leads);
+    tabelaAgrupada(
+      "tabela-campanhas",
+      grupos,
+      [
+        { titulo: c.titulo, valor: (g) => g.chave },
+        { titulo: "Leads", n: true, valor: (g) => fmt(g.leads) },
+        { titulo: "Responderam", n: true, valor: (g) => pilulaTaxa(g.leads ? g.resp / g.leads : 0) },
+        { titulo: "Reuniões", n: true, valor: (g) => fmt(g.reus) },
+        { titulo: "Lead → reunião", n: true, valor: (g) => pilulaTaxa(g.leads ? g.reus / g.leads : 0) },
+        { titulo: "Compareceram", n: true, valor: (g) => fmt(g.comp) },
+        { titulo: "Vendas", n: true, valor: (g) => fmt(g.vendas) },
+      ],
+      {
+        textoLongo: true,
+        vazio: "Sem leads com UTM neste filtro.",
+        aoClicar: dim === "utm_campaign" ? (v) => alternarFiltro("utm_campaign", v) : null,
+        selecionado: estado.utm_campaign,
+      },
+    );
+  }
+
+  // =========================================================
+  // Filtros (segmento, origem, campanha) e etiquetas
   // =========================================================
 
   function alternarFiltro(chave, valor) {
@@ -987,6 +1190,7 @@
     [
       ["segmento", "Segmento"],
       ["origem", "Origem"],
+      ["utm_campaign", "Campanha"],
     ].forEach(([chave, rotulo]) => {
       if (!estado[chave]) return;
       const chip = el("button", "chip");
@@ -1001,7 +1205,13 @@
   }
 
   const passaFiltros = (r) =>
-    (!estado.segmento || r.segmento === estado.segmento) && (!estado.origem || r.origem === estado.origem);
+    (!estado.segmento || r.segmento === estado.segmento) &&
+    (!estado.origem || r.origem === estado.origem) &&
+    (!estado.utm_campaign || r.utm_campaign === estado.utm_campaign);
+  const reunioesAgendadas = (de, ate) => REU.filter((m) => m.ag >= de && m.ag <= ate && passaFiltros(m));
+  const reunioesComData = (de, ate) =>
+    REU.filter((m) => m.dia >= de && m.dia <= Math.min(ate, hoje) && passaFiltros(m));
+  const fmtReais = (v) => `R$ ${Math.round(v).toLocaleString("pt-BR")}`;
   const filtrar = (de, ate) => REG.filter((r) => r.d >= de && r.d <= ate && passaFiltros(r));
 
   // =========================================================
@@ -1106,6 +1316,9 @@
     const { de, ate } = intervalo;
     const regs = filtrar(de, ate);
     const ant = intervalo.anterior ? filtrar(intervalo.anterior[0], intervalo.anterior[1]) : null;
+    ctx.reuAg = reunioesAgendadas(de, ate);
+    ctx.reuAgAnt = intervalo.anterior ? reunioesAgendadas(intervalo.anterior[0], intervalo.anterior[1]) : null;
+    ctx.reuDia = reunioesComData(de, ate);
 
     // gráfico diário: períodos curtos mostram os 14 dias até o fim do período, com destaque
     const curto = ate - de + 1 < 7;
@@ -1185,6 +1398,8 @@
     });
 
     renderTabelaSegmentos(regs);
+    renderReunioes();
+    renderCampanhas(regs);
   }
 
   // =========================================================
@@ -1193,6 +1408,16 @@
 
   document.querySelectorAll("#atalhos-periodo button").forEach((b) => {
     b.addEventListener("click", () => escolherPeriodo({ id: b.dataset.periodo }));
+  });
+
+  document.querySelectorAll("#dimensao-utm button").forEach((b) => {
+    b.addEventListener("click", () => {
+      estado.dimUtm = b.dataset.dim;
+      document
+        .querySelectorAll("#dimensao-utm button")
+        .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      render();
+    });
   });
 
   botaoPeriodos.addEventListener("click", () => (painelPeriodos.hidden ? abrirPainel() : fecharPainel()));
@@ -1216,6 +1441,7 @@
   [
     ["segmento", "Todos os segmentos"],
     ["origem", "Todas as origens"],
+    ["utm_campaign", "Todas as campanhas"],
   ].forEach(([chave, rotuloTodos]) => {
     const sel = document.getElementById(`f-${chave}`);
     const c = cat(chave);

@@ -10,6 +10,7 @@ Tabelas:
 
 import json
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -46,9 +47,50 @@ CREATE TABLE IF NOT EXISTS execucoes (
     erros       INTEGER
 );
 """
-TABELAS = ["analises", "historico", "execucoes"]
 
-ESQUEMA_SQLITE = """
+# Tabelas novas (mesmo SQL nos dois bancos). Sem nome, telefone ou e-mail: o cruzamento
+# entre planilha e GHL usa só hashes (tel_hash, email_hash).
+#   contatos: UTMs e origem registrada no GHL de cada contato com conversa analisada
+#   reunioes: linhas da planilha dos closers (substituídas inteiras a cada leitura)
+#   dia_* = dias desde 1970 no horário de Brasília
+ESQUEMA_EXTRA = """
+CREATE TABLE IF NOT EXISTS contatos (
+    contact_id    TEXT PRIMARY KEY,
+    utm_source    TEXT,
+    utm_medium    TEXT,
+    utm_campaign  TEXT,
+    utm_content   TEXT,
+    origem_crm    TEXT,
+    veio_de_form  INTEGER,
+    tel_hash      TEXT,
+    email_hash    TEXT,
+    atualizado_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS contatos_tel_idx ON contatos (tel_hash);
+CREATE INDEX IF NOT EXISTS contatos_email_idx ON contatos (email_hash);
+CREATE TABLE IF NOT EXISTS reunioes (
+    id                  TEXT PRIMARY KEY,
+    dia_agendamento     INTEGER,
+    dia_reuniao         INTEGER,
+    closer              TEXT,
+    sdr                 TEXT,
+    qualificacao_sdr    TEXT,
+    qualificacao_closer TEXT,
+    status              TEXT,
+    motivo_perda        TEXT,
+    vendido             INTEGER,
+    valor_vendido       REAL,
+    tel_hash            TEXT,
+    email_hash          TEXT,
+    contact_id          TEXT,
+    atualizado_em       TEXT NOT NULL
+)
+"""
+ESQUEMA_POSTGRES += ESQUEMA_EXTRA.replace("REAL", "DOUBLE PRECISION") + ";\n"
+TABELAS = ["analises", "historico", "execucoes", "contatos", "reunioes"]
+
+ESQUEMA_SQLITE = (
+    """
 CREATE TABLE IF NOT EXISTS analises (
     conversation_id    TEXT PRIMARY KEY,
     contact_id         TEXT,
@@ -78,24 +120,85 @@ CREATE TABLE IF NOT EXISTS execucoes (
     erros       INTEGER
 );
 """
+    + ESQUEMA_EXTRA
+    + ";\n"
+)
+
+COLUNAS_CONTATO = [
+    "contact_id",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "origem_crm",
+    "veio_de_form",
+    "tel_hash",
+    "email_hash",
+]
+COLUNAS_REUNIAO = [
+    "id",
+    "dia_agendamento",
+    "dia_reuniao",
+    "closer",
+    "sdr",
+    "qualificacao_sdr",
+    "qualificacao_closer",
+    "status",
+    "motivo_perda",
+    "vendido",
+    "valor_vendido",
+    "tel_hash",
+    "email_hash",
+    "contact_id",
+]
 
 
 class Banco:
     def __init__(self):
         self.postgres = bool(config.DATABASE_URL)
+        self._ultimo_uso = time.monotonic()
         if self.postgres:
-            import psycopg
-            from psycopg.rows import dict_row
-
-            # autocommit: leituras não deixam transação aberta; gravações usam self._transacao()
-            self.con = psycopg.connect(
-                config.DATABASE_URL, row_factory=dict_row, autocommit=True, connect_timeout=15
-            )
+            self.con = self._conectar_postgres()
             self._preparar_postgres()
         else:
             self.con = sqlite3.connect(config.CAMINHO_BANCO)
             self.con.row_factory = sqlite3.Row
             self.con.executescript(ESQUEMA_SQLITE)
+
+    @staticmethod
+    def _conectar_postgres():
+        import psycopg
+        from psycopg.rows import dict_row
+
+        # autocommit: leituras não deixam transação aberta; gravações usam self._transacao().
+        # keepalives: avisa o servidor que a conexão segue viva durante esperas longas (GHL, IA).
+        return psycopg.connect(
+            config.DATABASE_URL,
+            row_factory=dict_row,
+            autocommit=True,
+            connect_timeout=15,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=3,
+        )
+
+    def _garantir_conexao(self) -> None:
+        """O Supabase encerra conexões paradas por muito tempo: testa e reconecta se precisar."""
+        if not self.postgres:
+            return
+        parada = time.monotonic() - self._ultimo_uso
+        self._ultimo_uso = time.monotonic()
+        if self.con.closed or self.con.broken:
+            self.con = self._conectar_postgres()
+        elif parada > 30:
+            try:
+                self.con.execute("SELECT 1")
+            except Exception:
+                try:
+                    self.con.close()
+                finally:
+                    self.con = self._conectar_postgres()
 
     def _preparar_postgres(self) -> None:
         """Cria as tabelas e liga o RLS só quando falta algo.
@@ -132,12 +235,16 @@ class Banco:
     def _exec(self, sql: str, params: tuple = ()):
         if self.postgres:
             sql = sql.replace("?", "%s")
+            # fora de transação (ou já caída): pode testar e reconectar
+            if self.con.closed or not self.con.info.transaction_status:
+                self._garantir_conexao()
         return self.con.execute(sql, params)
 
     @contextmanager
     def _transacao(self):
         """Grava tudo ou nada (as duas tabelas ficam sempre coerentes)."""
         if self.postgres:
+            self._garantir_conexao()
             with self.con.transaction():
                 yield
         else:
@@ -240,11 +347,63 @@ class Banco:
             saida.append(d)
         return saida
 
+    # ---------- contatos (UTMs e origem) ----------
+
+    def salvar_contatos(self, contatos: list[dict]) -> None:
+        """Insere ou atualiza contatos. Cada dict tem as chaves de COLUNAS_CONTATO."""
+        if not contatos:
+            return
+        cols = ", ".join(COLUNAS_CONTATO)
+        marcas = ", ".join("?" for _ in COLUNAS_CONTATO)
+        atualiza = ", ".join(f"{c} = excluded.{c}" for c in COLUNAS_CONTATO[1:])
+        sql = f"""INSERT INTO contatos ({cols}, atualizado_em) VALUES ({marcas}, ?)
+                  ON CONFLICT (contact_id) DO UPDATE SET {atualiza}, atualizado_em = excluded.atualizado_em"""
+        agora = self._agora_texto()
+        with self._transacao():
+            self._execmany(sql, [tuple(c.get(k) for k in COLUNAS_CONTATO) + (agora,) for c in contatos])
+
+    def contatos_sem_dados(self, limite: int) -> list[str]:
+        """Contatos com conversa analisada que ainda não têm UTMs/origem lidos do GHL."""
+        linhas = self._exec(
+            """SELECT DISTINCT a.contact_id FROM analises a
+               LEFT JOIN contatos c ON c.contact_id = a.contact_id
+               WHERE a.contact_id IS NOT NULL AND c.contact_id IS NULL
+               LIMIT ?""",
+            (limite,),
+        ).fetchall()
+        return [lin["contact_id"] for lin in linhas]
+
+    def listar_contatos(self) -> dict[str, dict]:
+        linhas = self._exec(f"SELECT {', '.join(COLUNAS_CONTATO)} FROM contatos").fetchall()
+        return {lin["contact_id"]: dict(lin) for lin in linhas}
+
+    # ---------- reuniões (planilha dos closers) ----------
+
+    def substituir_reunioes(self, reunioes: list[dict]) -> None:
+        """A planilha é a fonte da verdade: troca todas as reuniões de uma vez (tudo ou nada)."""
+        cols = ", ".join(COLUNAS_REUNIAO)
+        marcas = ", ".join("?" for _ in COLUNAS_REUNIAO)
+        agora = self._agora_texto()
+        with self._transacao():
+            self._exec("DELETE FROM reunioes")
+            self._execmany(
+                f"INSERT INTO reunioes ({cols}, atualizado_em) VALUES ({marcas}, ?)",
+                [tuple(r.get(k) for k in COLUNAS_REUNIAO) + (agora,) for r in reunioes],
+            )
+
+    def listar_reunioes(self) -> list[dict]:
+        linhas = self._exec(f"SELECT {', '.join(COLUNAS_REUNIAO)} FROM reunioes").fetchall()
+        return [dict(lin) for lin in linhas]
+
+    def primeiro_dia_conversas_ms(self) -> int | None:
+        linha = self._exec("SELECT MIN(ultima_mensagem_ms) AS m FROM analises").fetchone()
+        return linha["m"] if linha else None
+
+    def _agora_texto(self) -> str:
+        return datetime.now(UTC).isoformat(timespec="seconds")
+
     def contagens(self) -> dict[str, int]:
-        return {
-            t: self._exec(f"SELECT COUNT(*) AS n FROM {t}").fetchone()["n"]
-            for t in ("analises", "historico", "execucoes")
-        }
+        return {t: self._exec(f"SELECT COUNT(*) AS n FROM {t}").fetchone()["n"] for t in TABELAS}
 
     def fechar(self) -> None:
         self.con.close()

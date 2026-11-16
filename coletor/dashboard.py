@@ -18,6 +18,7 @@ import json
 import random
 import shutil
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from coletor import banco, config
@@ -30,6 +31,25 @@ DIA_MS = 86_400_000
 FUSO_MS = -3 * 3_600_000  # horário de Brasília (sem horário de verão desde 2019)
 # Categorias com ordem natural (não reordenar por volume no gráfico)
 ORDEM_FIXA = ["porte", "desfecho"]
+# UTMs do formulário (campos personalizados do GHL): título no dashboard
+UTMS = {
+    "utm_campaign": "Campanha",
+    "utm_medium": "Público",
+    "utm_content": "Criativo",
+    "utm_source": "Fonte",
+}
+MAX_OPCOES_UTM = 20  # valores mais frequentes; o resto vira "Outras"
+SEM_UTM = "Sem UTM"
+CATS_REUNIAO = ["status", "closer", "sdr", "qualificacao_closer"]
+ORDEM_STATUS = [
+    "Comparecido",
+    "No show",
+    "Reagendamento",
+    "Cancelamento",
+    "A realizar",
+    "Sem status",
+    "Outro",
+]
 
 
 def dia(ms: int) -> int:
@@ -37,14 +57,31 @@ def dia(ms: int) -> int:
     return (ms + FUSO_MS) // DIA_MS
 
 
-def registros_reais(taxonomia: dict) -> list[dict]:
+def carregar_reais(taxonomia: dict) -> tuple[list[dict], list[dict]]:
+    """Conversas (com UTMs e origem do contato) e reuniões da planilha, já ligadas entre si."""
     chaves = [c["chave"] for c in taxonomia["categorias"]]
     db = banco.conectar()
     print(f"Lendo de: {db.onde}")
-    return [
-        {"t": lin["ultima_mensagem_ms"], **{k: lin["resultado"].get(k, "Não identificado") for k in chaves}}
-        for lin in db.listar_analises()
-    ]
+    contatos = db.listar_contatos()
+    registros, por_contato = [], {}
+    for lin in sorted(db.listar_analises(), key=lambda x: x["ultima_mensagem_ms"]):
+        r = {
+            "t": lin["ultima_mensagem_ms"],
+            **{k: lin["resultado"].get(k, "Não identificado") for k in chaves},
+        }
+        contato = contatos.get(lin["contact_id"]) or {}
+        for utm in UTMS:
+            r[utm] = contato.get(utm) or SEM_UTM
+        # quem não respondeu não passa pela IA: se veio de formulário/anúncio, foi o lead que pediu contato
+        if r.get("origem") == "Não identificado" and contato.get("veio_de_form"):
+            r["origem"] = "Lead pediu contato"
+        registros.append(r)
+        por_contato[lin["contact_id"]] = r  # a conversa mais recente do contato
+    reunioes = []
+    for reu in db.listar_reunioes():
+        lead = por_contato.get(reu["contact_id"]) or {}
+        reunioes.append({**reu, "ligada": int(bool(lead)), "lead": lead})
+    return registros, reunioes
 
 
 def registros_demo(taxonomia: dict) -> list[dict]:
@@ -113,21 +150,66 @@ def registros_demo(taxonomia: dict) -> list[dict]:
     return regs
 
 
-def compactar(taxonomia: dict, registros: list[dict]) -> list[list[int]]:
-    """Cada conversa vira [dia, índice da opção de cada categoria]: ~10x menor que o JSON completo."""
-    indices = []
-    for cat in taxonomia["categorias"]:
-        opcoes = [o["valor"] for o in cat["opcoes"]]
-        indices.append(
-            (
-                cat["chave"],
-                {v: i for i, v in enumerate(opcoes)},
-                opcoes.index("Não identificado") if "Não identificado" in opcoes else 0,
-            )
-        )
-    return [
-        [dia(r["t"])] + [mapa.get(r.get(chave), padrao) for chave, mapa, padrao in indices] for r in registros
+def opcoes_utm(registros: list[dict], chave: str) -> list[str]:
+    contagem = Counter(r.get(chave) for r in registros if r.get(chave) not in (None, SEM_UTM))
+    return [v for v, _ in contagem.most_common(MAX_OPCOES_UTM)] + ["Outras", SEM_UTM]
+
+
+def montar_categorias(taxonomia: dict, registros: list[dict]) -> list[dict]:
+    categorias = [
+        {
+            "chave": c["chave"],
+            "titulo": c["campo_ghl"].removeprefix("IA - "),
+            "opcoes": [o["valor"] for o in c["opcoes"]],
+        }
+        for c in taxonomia["categorias"]
     ]
+    for chave, titulo in UTMS.items():
+        categorias.append(
+            {"chave": chave, "titulo": titulo, "opcoes": opcoes_utm(registros, chave), "utm": True}
+        )
+    return categorias
+
+
+def indice(cat: dict, valor) -> int:
+    opcoes = cat["opcoes"]
+    if valor in opcoes:
+        return opcoes.index(valor)
+    if cat.get("utm"):
+        return opcoes.index(SEM_UTM if valor in (None, SEM_UTM) else "Outras")
+    return opcoes.index("Não identificado") if "Não identificado" in opcoes else 0
+
+
+def compactar(categorias: list[dict], registros: list[dict]) -> list[list[int]]:
+    """Cada conversa vira [dia, índice da opção de cada categoria]: ~10x menor que o JSON completo."""
+    mapas = [(c, {v: i for i, v in enumerate(c["opcoes"])}) for c in categorias]
+    return [
+        [dia(r["t"])]
+        + [m[r[c["chave"]]] if r.get(c["chave"]) in m else indice(c, r.get(c["chave"])) for c, m in mapas]
+        for r in registros
+    ]
+
+
+def compactar_reunioes(categorias: list[dict], reunioes: list[dict]) -> dict:
+    """Reuniões da planilha: [dia agendado, dia da reunião, índices (status, closer, sdr, qualificação),
+    vendido, valor, ligada ao GHL, índices das categorias do lead (segmento, origem, UTMs...)]."""
+    opcoes = {}
+    for chave in CATS_REUNIAO:
+        contagem = Counter(r[chave] or "Sem informação" for r in reunioes)
+        valores = [v for v, _ in contagem.most_common()]
+        if chave == "status":
+            valores = [s for s in ORDEM_STATUS if s in contagem] + [
+                v for v in valores if v not in ORDEM_STATUS
+            ]
+        opcoes[chave] = valores
+    linhas = []
+    for r in reunioes:
+        linha = [r["dia_agendamento"], r["dia_reuniao"]]
+        linha += [opcoes[k].index(r[k] or "Sem informação") for k in CATS_REUNIAO]
+        linha += [r["vendido"] or 0, round(r["valor_vendido"] or 0), r["ligada"]]
+        linha += [indice(c, r["lead"].get(c["chave"])) for c in categorias]
+        linhas.append(linha)
+    return {"categorias": [{"chave": k, "opcoes": opcoes[k]} for k in CATS_REUNIAO], "r": linhas}
 
 
 def css_fonte() -> str:
@@ -177,31 +259,31 @@ def main() -> None:
     args = parser.parse_args()
 
     taxonomia = config.carregar_taxonomia()
-    registros = registros_demo(taxonomia) if args.demo else registros_reais(taxonomia)
+    registros, reunioes = (registros_demo(taxonomia), []) if args.demo else carregar_reais(taxonomia)
     if not registros:
         raise SystemExit(
             "Nenhuma análise no banco ainda. Rode python -m coletor.main primeiro (ou use --demo)."
         )
 
+    categorias = montar_categorias(taxonomia, registros)
     agora_brasilia = datetime.now(timezone(timedelta(milliseconds=FUSO_MS)))
     dados = {
         "gerado_em": agora_brasilia.strftime("%d/%m/%Y às %H:%M"),
         "demo": args.demo,
         "fuso_ms": FUSO_MS,
         "ordem_fixa": ORDEM_FIXA,
-        "categorias": [
-            {
-                "chave": c["chave"],
-                "titulo": c["campo_ghl"].removeprefix("IA - "),
-                "opcoes": [o["valor"] for o in c["opcoes"]],
-            }
-            for c in taxonomia["categorias"]
-        ],
-        "r": compactar(taxonomia, registros),
+        "categorias": categorias,
+        "r": compactar(categorias, registros),
+        "reunioes": compactar_reunioes(categorias, reunioes),
     }
     montar_site(dados)
     tamanho = (PASTA_SAIDA / "dados.js").stat().st_size / 1024
-    print(f"Dashboard gerado com {len(registros)} conversas (dados: {tamanho:.0f} KB) em {PASTA_SAIDA}")
+    ligadas = sum(r["ligada"] for r in reunioes)
+    print(
+        f"Dashboard gerado com {len(registros)} conversas e {len(reunioes)} reuniões "
+        f"({ligadas} ligadas a leads)"
+    )
+    print(f"  dados: {tamanho:.0f} KB em {PASTA_SAIDA}")
     print(f"Abra no navegador: {PASTA_SAIDA / 'index.html'}")
 
 

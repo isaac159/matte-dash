@@ -40,6 +40,16 @@ PARALELO = int(_env("PARALELO", "4"))
 GRAVAR_NO_GHL = _env("GRAVAR_NO_GHL", "nao").lower() in ("sim", "s", "true", "1")
 # IDs de contatos internos (grupos de aviso, números da equipe) que não entram nas métricas
 IGNORAR_CONTATOS = {c.strip() for c in _env("IGNORAR_CONTATOS").split(",") if c.strip()}
+# Quantos contatos sem UTMs lidos completar por rodada (a 1ª vez são ~12 mil; vai completando aos poucos)
+CONTATOS_POR_RODADA = int(_env("CONTATOS_POR_RODADA", "4000"))
+
+# Planilha de agendamentos dos closers (Google Sheets). PLANILHA_ID = trecho do link entre /d/ e /edit.
+PLANILHA_ID = _env("PLANILHA_ID")
+# Credencial da conta de serviço do Google: caminho do arquivo .json (local) ou o conteúdo (GitHub).
+GOOGLE_CREDENCIAIS = _env("GOOGLE_CREDENCIAIS", "google-leitor.json")
+GOOGLE_CREDENCIAIS_JSON = _env("GOOGLE_CREDENCIAIS_JSON")
+# Para testes: ler a planilha de um arquivo .xlsx baixado em vez do Google Sheets
+PLANILHA_ARQUIVO = _env("PLANILHA_ARQUIVO")
 
 CAMINHO_BANCO = RAIZ / "dados.db"
 CAMINHO_TAXONOMIA = RAIZ / "taxonomia.json"

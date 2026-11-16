@@ -2,3 +2,4 @@
 -r requirements.txt
 ruff>=0.8,<1      # formatador e verificador do Python
 pillow>=11,<13    # usado para recortar o logo da pasta marca/
+openpyxl>=3.1,<4  # ler a planilha de reuniões de um arquivo .xlsx (testes)
